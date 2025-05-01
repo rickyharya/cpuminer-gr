@@ -1,42 +1,28 @@
 #!/bin/bash
+# build.sh untuk Orange Pi Zero2
 
 rm -v build.log 2>/dev/null
+echo "Build started at $(date)" | tee -a build.log
 
-make distclean | tee build.log
-
+make distclean | tee -a build.log
 rm -f config.status | tee -a build.log
 ./autogen.sh | tee -a build.log
 
-
-ARCH=""
+# Set arsitektur untuk ARMv8 + crypto
+ARCH="armv8-a+crypto"
 MFPU=""
 
+echo "Detected ARMv8 system with crypto optimization" | tee -a build.log
 
-if [[ $(uname -m) =~ "armv7" ]]; then
-  if [[ $(uname -m) != "armv7l" ]]; then
-    echo "Detected unknown ARMv7 processor $(uname -m)" | tee -a build.log
-  fi
-  echo "Detected ARMv7 (arm) system" | tee -a build.log
-  ARCH="armv7-a"
-  if [[ ! -z "$(cat /proc/cpuinfo | grep "vfpv4")" ]]; then
-    echo "Detected vfpv4 instruction set. Changing to -mfpu=neon-vfpv4" | tee -a build.log
-    MFPU="-mfpu=neon-vfpv4"
-  else
-    echo $(cat /proc/cpuinfo | grep "vfpv4") | tee -a build.log
-    echo "Using default -mfpu=neon" | tee -a build.log
-    MFPU="-mfpu=neon"
-  fi
-elif [[ $(uname -m) =~ "aarch64" ]]; then
-  echo "Detected ARMv8 (aarch64) system" | tee -a build.log
-  ARCH="armv8-a+crypto+simd"
-else
-  echo "Architecture $(uname -m). Compile as native" | tee -a build.log
-  ARCH="native"
-  MFPU=""
-fi
+# Optimasi tambahan untuk Cortex-A53
+CFLAGS="-O3 -march=${ARCH} -mtune=cortex-a53 -flto -funroll-loops"
+CXXFLAGS="${CFLAGS} -std=c++11"
 
-CFLAGS="-O3 -march=${ARCH} ${MFPU} -mtune=cortex-a53 -flto -funroll-loops" CXXFLAGS="$CFLAGS -std=c++11" ./configure --with-curl | tee -a build.log
+# Konfigurasi dan build
+./configure --with-curl CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" | tee -a build.log
+make -j2 | tee -a build.log
 
-make -j 2 | tee -a build.log
-
+# Strip hasil build agar lebih kecil
 strip -s cpuminer | tee -a build.log
+
+echo "Build ended at $(date)" | tee -a build.log
